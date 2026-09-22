@@ -1,0 +1,20 @@
+[project]
+name = "kubedoctor"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Rahul Dan", email = "rahuldan98@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "kubernetes>=36.0.3",
+    "mcp[cli]<2",
+]
+
+[project.scripts]
+kubedoctor = "kubedoctor:main"
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
