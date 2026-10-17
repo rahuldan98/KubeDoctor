@@ -896,11 +896,11 @@ def namespace_overview(
 # ============================================================
 
 @mcp.tool()
-def doctor(
+def namespace_health_scan(
     namespace: str = "default",
 ) -> str:
     """
-    Run a comprehensive read-only Kubernetes health scan.
+    Run a comprehensive read-only Kubernetes health scan across all pods in a namespace.
     """
 
     try:
