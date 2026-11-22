@@ -1,0 +1,152 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0f1d"/>
+      <stop offset="50%" stop-color="#0e172a"/>
+      <stop offset="100%" stop-color="#060913"/>
+    </linearGradient>
+
+    <!-- Glowing Rim Gradient -->
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#326ce5" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0.7"/>
+    </linearGradient>
+
+    <!-- K8s Blue Gradient -->
+    <linearGradient id="k8sBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="50%" stop-color="#326ce5"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+
+    <!-- Medical Cyan Pulse Gradient -->
+    <linearGradient id="cyanPulse" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#34d399"/>
+    </linearGradient>
+
+    <!-- Central Badge Gradient -->
+    <linearGradient id="centerBadge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <!-- Drop Shadows & Glows -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#0284c7" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background Card -->
+  <rect x="40" y="40" width="720" height="720" rx="160" fill="url(#bgGrad)"/>
+  <rect x="40" y="40" width="720" height="720" rx="160" fill="none" stroke="url(#rimGrad)" stroke-width="3"/>
+
+  <!-- Subtle Background Grid / Circuit lines -->
+  <g opacity="0.08" stroke="#38bdf8" stroke-width="1.5">
+    <circle cx="400" cy="380" r="280" fill="none" stroke-dasharray="8 8"/>
+    <circle cx="400" cy="380" r="210" fill="none"/>
+    <line x1="120" y1="380" x2="680" y2="380"/>
+    <line x1="400" y1="100" x2="400" y2="660"/>
+  </g>
+
+  <!-- Outer Kubernetes 7-Spoke Wheel Structure -->
+  <g id="k8s-helm" filter="url(#subtleShadow)">
+    <!-- Outer Ring Base -->
+    <circle cx="400" cy="360" r="175" fill="none" stroke="url(#k8sBlue)" stroke-width="24" stroke-linecap="round"/>
+    <circle cx="400" cy="360" r="195" fill="none" stroke="#38bdf8" stroke-width="3" opacity="0.6"/>
+
+    <!-- 7 Spokes of the Kubernetes Helm Wheel -->
+    <!-- Spoke 1 (Top) -->
+    <g transform="rotate(0 400 360)">
+      <rect x="388" y="145" width="24" height="75" rx="12" fill="url(#k8sBlue)"/>
+      <circle cx="400" cy="145" r="18" fill="url(#cyanPulse)"/>
+    </g>
+    <!-- Spoke 2 -->
+    <g transform="rotate(51.43 400 360)">
+      <rect x="388" y="145" width="24" height="75" rx="12" fill="url(#k8sBlue)"/>
+      <circle cx="400" cy="145" r="18" fill="url(#cyanPulse)"/>
+    </g>
+    <!-- Spoke 3 -->
+    <g transform="rotate(102.86 400 360)">
+      <rect x="388" y="145" width="24" height="75" rx="12" fill="url(#k8sBlue)"/>
+      <circle cx="400" cy="145" r="18" fill="url(#cyanPulse)"/>
+    </g>
+    <!-- Spoke 4 -->
+    <g transform="rotate(154.29 400 360)">
+      <rect x="388" y="145" width="24" height="75" rx="12" fill="url(#k8sBlue)"/>
+      <circle cx="400" cy="145" r="18" fill="url(#cyanPulse)"/>
+    </g>
+    <!-- Spoke 5 -->
+    <g transform="rotate(205.71 400 360)">
+      <rect x="388" y="145" width="24" height="75" rx="12" fill="url(#k8sBlue)"/>
+      <circle cx="400" cy="145" r="18" fill="url(#cyanPulse)"/>
+    </g>
+    <!-- Spoke 6 -->
+    <g transform="rotate(257.14 400 360)">
+      <rect x="388" y="145" width="24" height="75" rx="12" fill="url(#k8sBlue)"/>
+      <circle cx="400" cy="145" r="18" fill="url(#cyanPulse)"/>
+    </g>
+    <!-- Spoke 7 -->
+    <g transform="rotate(308.57 400 360)">
+      <rect x="388" y="145" width="24" height="75" rx="12" fill="url(#k8sBlue)"/>
+      <circle cx="400" cy="145" r="18" fill="url(#cyanPulse)"/>
+    </g>
+  </g>
+
+  <!-- Central Diagnostic Hub (Medical Shield / Core) -->
+  <g id="diagnostic-core">
+    <!-- Hub Shadow & Plate -->
+    <circle cx="400" cy="360" r="115" fill="url(#centerBadge)" stroke="#38bdf8" stroke-width="4"/>
+    <circle cx="400" cy="360" r="98" fill="#0b1329" stroke="#1e293b" stroke-width="2"/>
+
+    <!-- Medical Diagnostic Cross (Soft Neon Cyan) -->
+    <g opacity="0.25">
+      <rect x="384" y="295" width="32" height="130" rx="8" fill="#38bdf8"/>
+      <rect x="335" y="344" width="130" height="32" rx="8" fill="#38bdf8"/>
+    </g>
+
+    <!-- Stethoscope / Medical Heartbeat Diagnostic Pulse Line -->
+    <path d="M 315 360 L 345 360 L 360 325 L 380 405 L 405 295 L 425 415 L 445 345 L 460 360 L 485 360" 
+          fill="none" 
+          stroke="url(#cyanPulse)" 
+          stroke-width="7" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"
+          filter="url(#glow)"/>
+
+    <!-- Bright Center Node -->
+    <circle cx="405" cy="295" r="6" fill="#ffffff" filter="url(#glow)"/>
+    <circle cx="380" cy="405" r="5" fill="#38bdf8"/>
+  </g>
+
+  <!-- Brand Typography -->
+  <g id="brand-text">
+    <text x="400" y="615" 
+          text-anchor="middle" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif" 
+          font-size="46" 
+          font-weight="900" 
+          letter-spacing="5" 
+          fill="#ffffff">
+      KUBE<tspan fill="#38bdf8">DOCTOR</tspan>
+    </text>
+
+    <text x="400" y="652" 
+          text-anchor="middle" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif" 
+          font-size="16" 
+          font-weight="600" 
+          letter-spacing="4" 
+          fill="#94a3b8">
+      AI-POWERED K8S DIAGNOSTICS
+    </text>
+  </g>
+</svg>

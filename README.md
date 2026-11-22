@@ -1,4 +1,8 @@
-﻿# KubeDoctor
+﻿<p align="center">
+  <img src="assets/logo.png" alt="KubeDoctor Logo" width="380" />
+</p>
+
+# KubeDoctor
 
 > **AI-Powered Kubernetes Troubleshooting & Diagnostic Platform built on the Model Context Protocol (MCP).**
 
