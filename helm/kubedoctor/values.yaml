@@ -1,0 +1,90 @@
+# ============================================================
+# KubeDoctor Helm Values
+# ============================================================
+
+replicaCount: 1
+
+image:
+  # Set to your registry image, e.g. docker.io/youruser/kubedoctor
+  repository: kubedoctor
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ============================================================
+# Service Account & RBAC
+# ============================================================
+
+serviceAccount:
+  create: true
+  # Leave empty to use the auto-generated name
+  name: ""
+  annotations: {}
+
+rbac:
+  # Creates a ClusterRole + ClusterRoleBinding (read-only)
+  create: true
+
+# ============================================================
+# Service
+# ============================================================
+
+service:
+  type: ClusterIP
+  port: 8000
+
+# ============================================================
+# Ingress (optional — for external access without port-forward)
+# ============================================================
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: localhost
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: kubedoctor.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: kubedoctor-tls
+  #    hosts:
+  #      - kubedoctor.local
+
+# ============================================================
+# Resource limits
+# ============================================================
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# ============================================================
+# Pod settings
+# ============================================================
+
+podAnnotations: {}
+podSecurityContext: {}
+
+securityContext: {}
+  # Uncomment to harden after confirming the pod starts correctly:
+  # readOnlyRootFilesystem: false
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

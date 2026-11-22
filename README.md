@@ -1,1137 +1,323 @@
-# 🩺 KubeDoctor
+﻿# KubeDoctor
 
-> **AI-powered Kubernetes troubleshooting assistant built with the Model Context Protocol (MCP).**
+> **AI-Powered Kubernetes Troubleshooting & Diagnostic Platform built on the Model Context Protocol (MCP).**
 
-KubeDoctor is a Python-based Kubernetes troubleshooting project that exposes Kubernetes diagnostic capabilities through an **MCP (Model Context Protocol) server**.
-
-It connects an MCP client to a Kubernetes cluster through the **Kubernetes Python Client**, providing a structured set of troubleshooting tools for inspecting cluster health, pods, nodes, deployments, services, ingress resources, events, and common pod failures.
-
-The project is designed as a foundation for building an **AI-powered Kubernetes troubleshooting assistant** where an LLM can eventually select diagnostic tools, collect evidence, identify root causes, and provide evidence-based recommendations.
-
----
-
-## 🎯 Project Goal
-
-Kubernetes environments can generate a large amount of operational information:
-
-* Pod status
-* Container logs
-* Kubernetes events
-* Node conditions
-* Deployment status
-* Service configuration
-* Ingress configuration
-* Image-pull failures
-* CrashLoopBackOff
-* Pending workloads
-* Namespace-level resource information
-
-Troubleshooting often requires engineers to manually execute multiple `kubectl` commands and correlate information across different Kubernetes resources.
-
-KubeDoctor provides a structured troubleshooting interface that allows an MCP client to invoke Kubernetes diagnostic operations through dedicated tools.
-
-### Current workflow
-
-```text
-User
-  │
-  ▼
-MCP Client
-  │
-  │ MCP / stdio
-  ▼
-KubeDoctor MCP Server
-  │
-  │ Kubernetes Python Client
-  ▼
-Kubernetes API Server
-  │
-  ▼
-Kubernetes Cluster
-```
-
-The current implementation focuses on **Kubernetes diagnostics and MCP integration**.
-
-LLM-based reasoning and autonomous troubleshooting are part of the planned roadmap.
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io)
+[![MCP](https://img.shields.io/badge/Model_Context_Protocol-MCP-black?style=for-the-badge)](https://modelcontextprotocol.io)
+[![Python](https://img.shields.io/badge/Python-3.13+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Helm](https://img.shields.io/badge/Helm-3+-0F1689?style=for-the-badge&logo=helm&logoColor=white)](https://helm.sh)
+[![Docker](https://img.shields.io/badge/Docker-Supported-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
 
 ---
 
-# 🧠 What is MCP?
+## Overview
 
-**Model Context Protocol (MCP)** is a protocol that allows AI applications and clients to interact with external tools and data sources through a standardized interface.
+**KubeDoctor** bridges the gap between Kubernetes clusters and modern AI assistants. Built on the **Model Context Protocol (MCP)**, it exposes deep cluster diagnostics, real-time workload inspections, and automatic failure analysis as structured tools that can be consumed by:
 
-In KubeDoctor, MCP provides the interface between the client and Kubernetes troubleshooting capabilities.
-
-Instead of an AI client directly implementing Kubernetes-specific logic, the client can discover and invoke tools exposed by the KubeDoctor MCP server.
-
-For example:
-
-```text
-AI / MCP Client
-       │
-       │ "diagnose this pod"
-       ▼
-KubeDoctor MCP Server
-       │
-       ▼
-Kubernetes Python Client
-       │
-       ▼
-Kubernetes API
-```
-
-This separation makes the troubleshooting functionality reusable by different MCP-compatible clients.
+- **AI Assistants & IDEs** (Claude Desktop, Antigravity, Cursor, Windsurf, custom LLM agents)
+- **DevOps & SRE Engineers** via an interactive CLI diagnostic terminal
+- **Automation pipelines, Slackbots, & internal developer platforms**
 
 ---
 
-# 🔌 Why MCP is Useful for KubeDoctor
+## Two Deployment Modes (100% Identical Troubleshooting Experience)
 
-Kubernetes troubleshooting requires access to live cluster information.
+Regardless of which deployment mode you choose, **the user experience is 100% identical**:
+- Same interactive CLI commands (`health`, `pods`, `doctor`, `crashes`, `scan`).
+- Same output format and diagnostic reports.
+- Same 16 MCP tools available to AI assistants.
 
-An AI assistant cannot reliably troubleshoot Kubernetes workloads using only its internal knowledge because cluster state changes continuously.
+The difference is only **where the server runs** and **how authentication is handled**:
 
-MCP provides a standardized mechanism for exposing live Kubernetes operations as tools.
+```
++--------------------------------------------------------+
+|             Mode 1: Local Developer Mode               |
+|         (Zero-Cluster Installation / stdio)            |
++-------------------------------------------+------------+
+                                            | stdio
+                                     +------v------+
+                                     |  Developer  |
+                                     | Workstation |
+                                     +------+------+
+                                            | ~/.kube/config
+                                     +------v------+
+                                     | K8s Cluster |
+                                     +-------------+
 
-For example, an MCP client can discover tools such as:
-
-```text
-cluster_health
-list_pods
-get_pod_logs
-diagnose_pod
-get_pod_events
-node_health
-diagnose_deployment
-diagnose_service
-diagnose_ingress
++--------------------------------------------------------+
+|             Mode 2: In-Cluster Helm Mode               |
+|      (Direct Ingress / Zero Credential Distribution)   |
++--------------------------------------------------------+
+  Clients (Claude Desktop, Cursor, CLI, CI/CD)
+             |
+             | HTTP / SSE (Direct via Ingress - No port-forward!)
+      +------v------+
+      | K8s Ingress | (e.g. http://localhost/sse)
+      +------+------+
+             | port 8000
+      +------v--------------+
+      |  KubeDoctor Pod     |
+      |  (Read-Only RBAC)   |
+      +------+--------------+
+             | In-Cluster ServiceAccount API
+      +------v------+
+      | K8s Cluster |
+      +-------------+
 ```
 
-The client can then invoke these tools when Kubernetes information is required.
+### Quick Comparison
 
-### Without MCP
-
-```text
-AI Application
-   │
-   ├── Kubernetes integration
-   ├── Authentication logic
-   ├── API calls
-   ├── Tool definitions
-   └── Troubleshooting logic
-```
-
-### With MCP
-
-```text
-AI / MCP Client
-      │
-      │ MCP
-      ▼
-KubeDoctor MCP Server
-      │
-      ▼
-Kubernetes API
-```
-
-This creates a cleaner separation between:
-
-* **AI/client layer**
-* **Tool layer**
-* **Kubernetes integration layer**
+| Feature | Mode 1: Local Developer Mode | Mode 2: In-Cluster Helm Mode |
+|---|---|---|
+| **Best For** | Solo developers, local cluster testing | DevOps teams, enterprises, shared AI tools |
+| **Cluster Footprint** | **Zero** — nothing installed in cluster | 1 Pod + Read-only RBAC in `kubedoctor` namespace |
+| **Cluster Auth** | Uses your personal `~/.kube/config` | In-Cluster `ServiceAccount` (Read-only RBAC) |
+| **Connection Transport**| Standard I/O (`stdio` subprocess) | Network HTTP (`SSE` stream via Ingress) |
+| **Port-Forward Needed?**| No | **No** (Direct access via Ingress!) |
+| **Team Credential Sharing**| Requires sharing admin kubeconfig | **Zero credential sharing** required |
+| **Troubleshooting Tools**| All 16 MCP tools | All 16 MCP tools (Identical) |
 
 ---
 
-# 🚫 What MCP Does NOT Do
-
-MCP itself is **not an AI model** and does not automatically troubleshoot Kubernetes.
-
-MCP does not:
-
-* ❌ Provide an LLM
-* ❌ Automatically determine root cause
-* ❌ Automatically fix Kubernetes resources
-* ❌ Replace Kubernetes
-* ❌ Replace `kubectl`
-* ❌ Guarantee that a diagnosis is correct
-* ❌ Automatically make destructive changes to a cluster
-
-In the current KubeDoctor implementation, MCP is primarily used to expose Kubernetes troubleshooting operations as structured tools.
-
-AI-driven reasoning, natural-language interaction, automatic tool selection, and remediation are planned features.
+## Installation & Usage
 
 ---
 
-# 🏗️ Architecture
+### Mode 1: Local Developer Mode (Quickstart)
 
-## Current Architecture
+Run KubeDoctor directly from your laptop without installing anything inside your Kubernetes cluster.
 
-```mermaid
-flowchart TD
-    U[User] --> C[MCP Client]
-    C -->|stdio| S[KubeDoctor MCP Server]
-    S --> K[Kubernetes Python Client]
-    K --> A[Kubernetes API Server]
-    A --> CL[Kubernetes Cluster]
+#### Prerequisites
+- Python 3.13+ installed
+- [uv](https://github.com/astral-sh/uv) (recommended) or `pip`
+- Valid `~/.kube/config` with cluster access
 
-    CL --> P[Pods]
-    CL --> N[Nodes]
-    CL --> D[Deployments]
-    CL --> SV[Services]
-    CL --> I[Ingress]
-    CL --> E[Events]
-```
-
-### Components
-
-| Component                | Responsibility                                        |
-| ------------------------ | ----------------------------------------------------- |
-| User                     | Initiates troubleshooting commands                    |
-| MCP Client               | Connects to the MCP server and invokes tools          |
-| KubeDoctor MCP Server    | Exposes Kubernetes troubleshooting tools              |
-| Kubernetes Python Client | Communicates with the Kubernetes API                  |
-| Kubernetes API Server    | Provides cluster state and resource information       |
-| Kubernetes Cluster       | Contains workloads and infrastructure being diagnosed |
-
----
-
-# 🔄 How the Components Interact
-
-## 1. MCP Client
-
-The MCP client establishes a connection to the KubeDoctor MCP server using:
-
-* `ClientSession`
-* `stdio_client`
-* `StdioServerParameters`
-
-The client can initialize the MCP session and discover the available tools.
-
-Example:
-
-```text
-Starting KubeDoctor MCP server...
-Connected to KubeDoctor MCP server!
-MCP initialization successful!
-
-Available KubeDoctor tools:
-- cluster_health
-- list_pods
-- get_pod_logs
-- diagnose_pod
-...
-```
-
----
-
-## 2. MCP Server
-
-The KubeDoctor server is implemented using **FastMCP**.
-
-The server exposes Kubernetes troubleshooting functionality as MCP tools.
-
-Conceptually:
-
-```text
-MCP Server
-│
-├── cluster_health
-├── list_pods
-├── get_pod_logs
-├── diagnose_pod
-├── get_pod_events
-├── node_health
-├── diagnose_deployment
-├── diagnose_service
-├── diagnose_ingress
-└── doctor
-```
-
----
-
-## 3. Kubernetes Python Client
-
-The MCP server communicates with Kubernetes through the Kubernetes Python Client.
-
-```text
-KubeDoctor
-     │
-     ▼
-Kubernetes Python Client
-     │
-     ▼
-Kubernetes API Server
-```
-
-The Kubernetes client handles communication with the Kubernetes cluster rather than KubeDoctor directly implementing Kubernetes API communication.
-
----
-
-# 🛠️ Current Features
-
-KubeDoctor currently exposes the following MCP tools.
-
-| Tool                       | Purpose                                   |
-| -------------------------- | ----------------------------------------- |
-| `cluster_health`           | Check overall cluster health              |
-| `list_pods`                | List Kubernetes pods                      |
-| `get_pod_logs`             | Retrieve pod/container logs               |
-| `diagnose_pod`             | Inspect and diagnose a pod                |
-| `get_pod_events`           | Retrieve events associated with a pod     |
-| `detect_crashloops`        | Detect CrashLoop-related pod failures     |
-| `detect_image_pull_errors` | Detect image-pull failures                |
-| `detect_pending_pods`      | Detect pods stuck in Pending state        |
-| `node_health`              | Inspect Kubernetes node health            |
-| `diagnose_deployment`      | Diagnose deployment state                 |
-| `diagnose_service`         | Inspect Kubernetes services               |
-| `diagnose_ingress`         | Inspect ingress resources                 |
-| `namespace_overview`       | Provide namespace-level information       |
-| `doctor`                   | Run troubleshooting diagnostics for a pod |
-| `pod_events`               | Retrieve pod-related Kubernetes events    |
-
-> **Note:** These are the currently implemented KubeDoctor tools. AI/LLM-powered reasoning is not represented as a current feature.
-
----
-
-# 💻 Current CLI
-
-The current MCP client provides a simple command-driven interface.
-
-Available commands include:
-
-```text
-health
-pods
-node-health
-doctor <pod> <namespace>
-tools
-exit
-```
-
-Example:
-
-```text
-> health
-```
-
-```text
-> pods
-```
-
-```text
-> node-health
-```
-
-```text
-> doctor my-pod default
-```
-
-```text
-> tools
-```
-
-```text
-> exit
-```
-
----
-
-# ☸️ Kubernetes Environment
-
-KubeDoctor is currently developed and tested using:
-
-* Windows
-* Docker Desktop
-* Docker Desktop Kubernetes
-* Python
-* Kubernetes Python Client
-
-The current Kubernetes cluster includes nodes such as:
-
-```text
-desktop-control-plane
-desktop-worker
-```
-
-Both currently report:
-
-```text
-Ready=True
-```
-
-Example cluster view:
-
-```text
-NODE                    STATUS
-desktop-control-plane   Ready
-desktop-worker          Ready
-```
-
----
-
-# 📋 Prerequisites
-
-Before running KubeDoctor, install the following:
-
-### Required
-
-* Python
-* `uv`
-* Docker Desktop
-* Kubernetes enabled in Docker Desktop
-* Access to a Kubernetes cluster
-* Valid Kubernetes configuration
-
-### Verify Python
-
+#### Step 1: Clone & Setup
 ```bash
-python --version
-```
-
-### Verify uv
-
-```bash
-uv --version
-```
-
-### Verify Docker
-
-```bash
-docker --version
-```
-
-### Verify Kubernetes
-
-```bash
-kubectl version --client
-```
-
-### Verify cluster access
-
-```bash
-kubectl get nodes
-```
-
-Expected example:
-
-```text
-NAME                    STATUS   ROLES           AGE
-desktop-control-plane   Ready    control-plane   ...
-desktop-worker          Ready    <none>          ...
-```
-
----
-
-# 📦 Installation
-
-Clone the repository:
-
-```bash
-git clone https://github.com/<your-username>/KubeDoctor.git
-```
-
-Move into the project:
-
-```bash
+git clone https://github.com/rahuldan98/KubeDoctor.git
 cd KubeDoctor
-```
-
-Install/sync the project dependencies using `uv`:
-
-```bash
 uv sync
 ```
 
-The project uses `uv` for dependency and environment management.
-
----
-
-# 🔧 Project Dependencies
-
-The project is built around:
-
-* Python
-* FastMCP
-* MCP Python SDK
-* Kubernetes Python Client
-
-The MCP SDK version currently used by the project is:
-
-```text
-MCP Python SDK: 1.30.0
-```
-
-Dependencies are managed through:
-
-```text
-pyproject.toml
-uv.lock
-```
-
----
-
-# ☸️ Kubernetes Configuration
-
-KubeDoctor requires access to a Kubernetes cluster.
-
-For local Docker Desktop Kubernetes development, verify that Kubernetes is enabled in Docker Desktop.
-
-Check cluster access:
-
-```bash
-kubectl get nodes
-```
-
-Check the active Kubernetes context:
-
-```bash
-kubectl config current-context
-```
-
-View available contexts:
-
-```bash
-kubectl config get-contexts
-```
-
-KubeDoctor uses the Kubernetes client configuration available to the Python Kubernetes client.
-
-For a standard local configuration, your kubeconfig is typically available through the Kubernetes configuration used by your environment.
-
-> **Important:** KubeDoctor should be given only the Kubernetes permissions required for the operations it needs.
-
----
-
-# 🚀 Running KubeDoctor
-
-## Start the MCP Server
-
-From the project root:
-
-```bash
-uv run python src/kubedoctor/server.py
-```
-
-The server uses **stdio transport**.
-
-The MCP server is intended to communicate with an MCP client through its standard input/output streams.
-
----
-
-# 🤖 Running the MCP Client
-
-Open another terminal and run:
-
+#### Step 2: Launch the Diagnostic CLI
 ```bash
 uv run python src/kubedoctor/client.py
 ```
 
-The client establishes a connection to the KubeDoctor MCP server.
-
-A successful initialization looks similar to:
-
-```text
-Starting KubeDoctor MCP server...
-Connected to KubeDoctor MCP server!
-MCP initialization successful!
-
-Available KubeDoctor tools:
-- cluster_health
-- list_pods
-- get_pod_logs
-- diagnose_pod
-- get_pod_events
-- detect_crashloops
-- detect_image_pull_errors
-- detect_pending_pods
-- node_health
-- diagnose_deployment
-- diagnose_service
-- diagnose_ingress
-- namespace_overview
-- doctor
-- pod_events
+#### Step 3: Connect to AI Tools (Claude Desktop / Cursor / Antigravity)
+Add this to your `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "kubedoctor": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/absolute/path/to/KubeDoctor",
+        "python",
+        "src/kubedoctor/server.py"
+      ]
+    }
+  }
+}
 ```
 
 ---
 
-# 🔍 Example Workflow
+### Mode 2: In-Cluster Helm Mode (Enterprise & Team Setup)
 
-Suppose a Kubernetes application is not working correctly.
+Deploy KubeDoctor inside the cluster as a centralized diagnostic server. With Ingress enabled, users and AI agents connect directly over HTTP with **zero port-forwarding required**.
 
-A typical troubleshooting workflow could be:
+#### Prerequisites
+- Kubernetes cluster 1.24+
+- `helm` 3.0+
+- Ingress controller (e.g. `ingress-nginx`) installed in your cluster
 
-```text
-1. Check cluster health
-        ↓
-2. Check node health
-        ↓
-3. List pods
-        ↓
-4. Identify unhealthy pod
-        ↓
-5. Run pod diagnosis
-        ↓
-6. Inspect events
-        ↓
-7. Inspect logs
-        ↓
-8. Identify possible failure
-```
-
-Using the current client:
-
-```text
-> health
-```
-
-Then:
-
-```text
-> node-health
-```
-
-Then:
-
-```text
-> pods
-```
-
-Then diagnose a specific pod:
-
-```text
-> doctor my-pod default
-```
-
-The troubleshooting information can then be used by an engineer to investigate the underlying Kubernetes issue.
-
----
-
-# 🧪 Example Troubleshooting Scenario
-
-## Scenario: Pod repeatedly restarting
-
-Consider a workload where a pod is experiencing repeated container restarts.
-
-A traditional Kubernetes troubleshooting workflow might involve:
-
+#### Step 1: Install with Helm (Ingress Enabled)
 ```bash
-kubectl get pods
-kubectl describe pod <pod>
-kubectl logs <pod>
-kubectl get events
+helm install kubedoctor ./helm/kubedoctor \
+  --namespace kubedoctor \
+  --create-namespace \
+  --set image.repository=rahuldan98/kubedoctor \
+  --set image.tag=latest \
+  --set ingress.enabled=true
 ```
 
-With KubeDoctor, the equivalent diagnostic capabilities can be accessed through MCP tools.
-
-Example:
-
-```text
-> pods
-```
-
-Identify the problematic pod:
-
-```text
-my-application-7f8c9d6b5f-x2abc
-```
-
-Run:
-
-```text
-> doctor my-application-7f8c9d6b5f-x2abc default
-```
-
-KubeDoctor can use its Kubernetes diagnostic tools to inspect relevant information such as:
-
-* Pod state
-* Container state
-* Restart information
-* Kubernetes events
-* Logs
-* Failure conditions
-
-The current project provides the diagnostic information; **automatic AI root-cause reasoning is planned for a future phase**.
-
----
-
-# 🧩 MCP Tool Discovery
-
-One of the important capabilities of the current client is MCP tool discovery.
-
-After connecting to the server, the client can retrieve the available tools.
-
-Conceptually:
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant C as MCP Client
-    participant S as KubeDoctor MCP Server
-    participant K as Kubernetes API
-
-    U->>C: Start client
-    C->>S: Initialize MCP session
-    S-->>C: MCP initialization response
-    C->>S: List available tools
-    S-->>C: Kubernetes troubleshooting tools
-    C->>S: Invoke selected tool
-    S->>K: Kubernetes API request
-    K-->>S: Cluster information
-    S-->>C: Tool result
-    C-->>U: Display result
-```
-
-This demonstrates the separation between the client and the Kubernetes troubleshooting implementation.
-
----
-
-# 📁 Project Structure
-
-Current project structure:
-
-```text
-KubeDoctor/
-├── pyproject.toml
-├── uv.lock
-├── README.md
-└── src/
-    └── kubedoctor/
-        ├── __init__.py
-        ├── server.py
-        └── client.py
-```
-
-### `pyproject.toml`
-
-Project metadata and Python dependency configuration.
-
-### `uv.lock`
-
-Locked dependency versions generated and maintained by `uv`.
-
-### `server.py`
-
-Contains the KubeDoctor MCP server implementation and Kubernetes troubleshooting tools.
-
-### `client.py`
-
-Contains the MCP client implementation.
-
-It uses:
-
-```text
-ClientSession
-stdio_client
-StdioServerParameters
-```
-
-to connect to the MCP server and interact with its tools.
-
-### `__init__.py`
-
-Python package initialization.
-
----
-
-# 🧱 Technology Stack
-
-| Technology               | Role                                     |
-| ------------------------ | ---------------------------------------- |
-| Python                   | Application language                     |
-| uv                       | Python package/project management        |
-| MCP Python SDK           | MCP implementation                       |
-| FastMCP                  | MCP server framework                     |
-| Kubernetes Python Client | Kubernetes API integration               |
-| Kubernetes               | Target orchestration platform            |
-| Docker Desktop           | Local Kubernetes development environment |
-| stdio                    | MCP transport                            |
-| Mermaid                  | Architecture/documentation diagrams      |
-
----
-
-# 🔐 Security Considerations
-
-KubeDoctor interacts with a Kubernetes API and therefore should be treated as a privileged operational component.
-
-### Current security considerations
-
-* Use a dedicated Kubernetes identity where possible.
-* Follow the principle of least privilege.
-* Avoid using highly privileged cluster-admin credentials unnecessarily.
-* Protect kubeconfig files.
-* Do not commit credentials or secrets to Git.
-* Avoid storing sensitive Kubernetes logs in source control.
-* Review Kubernetes RBAC permissions before connecting KubeDoctor to shared clusters.
-
-### Future security considerations
-
-As AI capabilities are introduced, additional controls will be important:
-
-```text
-AI Client
-   │
-   ▼
-Permission Boundary
-   │
-   ▼
-MCP Server
-   │
-   ▼
-RBAC
-   │
-   ▼
-Kubernetes API
-```
-
-Potential future controls include:
-
-* Read-only diagnostic roles
-* Explicit approval for write operations
-* Tool-level authorization
-* Audit logging
-* Namespace restrictions
-* Sensitive-data filtering
-* Secret redaction
-* Production-cluster safeguards
-
----
-
-# ⚠️ Current Limitations
-
-KubeDoctor is currently a **development/portfolio project**.
-
-Current limitations include:
-
-* No production-grade deployment model yet.
-* No web UI.
-* No natural-language troubleshooting interface yet.
-* No integrated LLM reasoning layer yet.
-* No autonomous root-cause analysis yet.
-* No automatic remediation.
-* No automatic tool-selection logic driven by an LLM.
-* Current development environment is primarily Docker Desktop Kubernetes on Windows.
-* MCP communication currently uses stdio.
-* Production-scale security and authorization controls are not yet implemented.
-
-These limitations are intentional areas for future development.
-
----
-
-# 🤖 Planned AI Architecture
-
-The long-term goal is to evolve KubeDoctor from a Kubernetes diagnostic tool into an **AI-powered Kubernetes troubleshooting assistant**.
-
-## Future Architecture
-
-```mermaid
-flowchart TD
-    U[User] --> UI[CLI / Web UI]
-    UI --> LLM[LLM / AI Reasoning Layer]
-
-    LLM --> TS[Tool Selection]
-    TS --> MCP[KubeDoctor MCP Server]
-
-    MCP --> KC[Kubernetes Python Client]
-    KC --> API[Kubernetes API Server]
-    API --> CL[Kubernetes Cluster]
-
-    CL --> P[Pods]
-    CL --> N[Nodes]
-    CL --> D[Deployments]
-    CL --> S[Services]
-    CL --> I[Ingress]
-    CL --> E[Events]
-
-    API --> EV[Evidence]
-    EV --> MCP
-    MCP --> LLM
-
-    LLM --> RCA[Root Cause Analysis]
-    RCA --> REC[Evidence-Based Recommendations]
-    REC --> UI
-```
-
----
-
-# 🧠 Planned AI Workflow
-
-The future troubleshooting flow could look like:
-
-```text
-User:
-"Why is my application failing?"
-
-        ↓
-
-AI Reasoning Layer
-
-        ↓
-
-Select diagnostic tools
-
-        ↓
-
-KubeDoctor MCP Server
-
-        ↓
-
-Kubernetes API
-
-        ↓
-
-Collect evidence
-
-        ↓
-
-Analyze evidence
-
-        ↓
-
-Identify probable root cause
-
-        ↓
-
-Generate evidence-based recommendations
-
-        ↓
-
-Present findings to user
-```
-
-The AI layer should not blindly execute commands.
-
-Instead, it should collect relevant evidence through MCP tools and explain how that evidence supports the diagnosis.
-
----
-
-# 🗺️ Roadmap
-
-## Phase 1 — Kubernetes MCP Foundation ✅
-
-* [x] Python project setup
-* [x] `uv` dependency management
-* [x] MCP server
-* [x] FastMCP integration
-* [x] Kubernetes Python Client integration
-* [x] stdio MCP transport
-* [x] MCP client
-* [x] MCP session initialization
-* [x] MCP tool discovery
-* [x] Kubernetes health/troubleshooting tools
-
----
-
-## Phase 2 — Interactive CLI 🚧
-
-* [ ] Interactive troubleshooting CLI
-* [ ] Improved command handling
-* [ ] Better diagnostic output
-* [ ] Structured troubleshooting reports
-* [ ] Improved error handling
-
----
-
-## Phase 3 — AI/LLM Integration 📋
-
-* [ ] LLM integration
-* [ ] Natural-language Kubernetes troubleshooting
-* [ ] Automatic MCP tool selection
-* [ ] Multi-step troubleshooting workflows
-* [ ] Root-cause analysis
-* [ ] Evidence-based recommendations
-
----
-
-## Phase 4 — User Experience 📋
-
-* [ ] Web UI
-* [ ] Troubleshooting dashboard
-* [ ] Real-time cluster diagnostics
-* [ ] Historical troubleshooting information
-* [ ] Human approval workflow
-
----
-
-## Phase 5 — Production Kubernetes Support 📋
-
-* [ ] Production-grade deployment
-* [ ] Kubernetes-native deployment
-* [ ] RBAC integration
-* [ ] Authentication and authorization
-* [ ] Audit logging
-* [ ] Multi-cluster support
-* [ ] Namespace-level access controls
-* [ ] Secure production operating model
-
----
-
-# 📊 Current vs Planned Capabilities
-
-| Capability                       | Current | Planned |
-| -------------------------------- | :-----: | :-----: |
-| Kubernetes API integration       |    ✅    |         |
-| MCP server                       |    ✅    |         |
-| MCP client                       |    ✅    |         |
-| MCP tool discovery               |    ✅    |         |
-| Kubernetes diagnostics           |    ✅    |         |
-| Pod troubleshooting              |    ✅    |         |
-| Node health checks               |    ✅    |         |
-| Deployment diagnostics           |    ✅    |         |
-| Service diagnostics              |    ✅    |         |
-| Ingress diagnostics              |    ✅    |         |
-| CrashLoop detection              |    ✅    |         |
-| Image-pull error detection       |    ✅    |         |
-| Pending pod detection            |    ✅    |         |
-| LLM integration                  |         |    📋   |
-| Natural-language troubleshooting |         |    📋   |
-| Automatic tool selection         |         |    📋   |
-| Root-cause analysis              |         |    📋   |
-| Evidence-based recommendations   |         |    📋   |
-| Web UI                           |         |    📋   |
-| Automatic remediation            |         |    📋   |
-| Production Kubernetes support    |         |    📋   |
-
----
-
-# 🧪 Development Philosophy
-
-KubeDoctor is being developed around a few principles:
-
-### 1. Evidence first
-
-Troubleshooting should be based on actual Kubernetes state rather than assumptions.
-
-### 2. Tool-driven diagnostics
-
-Kubernetes operations should be exposed through clearly defined tools.
-
-### 3. AI as a reasoning layer
-
-The planned AI component should interpret evidence rather than replace Kubernetes diagnostics.
-
-### 4. Human-in-the-loop
-
-Especially for production environments, recommendations should be reviewable before any potentially impactful action.
-
-### 5. Cloud-native design
-
-The project is designed around Kubernetes-native concepts and modern cloud-native tooling.
-
----
-
-# 🤝 Contributing
-
-Contributions, ideas, and feedback are welcome.
-
-To contribute:
-
+#### Step 2: Verify the Deployment
 ```bash
-git clone https://github.com/<your-username>/KubeDoctor.git
-cd KubeDoctor
-uv sync
+kubectl get all,ingress -n kubedoctor
+```
+Expected output:
+```text
+NAME                              READY   STATUS    RESTARTS   AGE
+pod/kubedoctor-xxxxxxxxxx-xxxxx   1/1     Running   0          30s
+
+NAME                 TYPE        CLUSTER-IP     PORT(S)
+service/kubedoctor   ClusterIP   10.96.250.94   8000/TCP
+
+NAME                 CLASS   HOSTS                        ADDRESS   PORTS
+ingress/kubedoctor   nginx   localhost,kubedoctor.local   ...       80
 ```
 
-Create a feature branch:
+#### Step 3: Connect to KubeDoctor (No Port-Forward Needed!)
 
+##### A. Connect via Interactive CLI
 ```bash
-git checkout -b feature/my-feature
+# Windows PowerShell
+$env:KUBEDOCTOR_URL = "http://localhost/sse"
+uv run python src/kubedoctor/client.py
+
+# Linux / macOS
+export KUBEDOCTOR_URL="http://localhost/sse"
+uv run python src/kubedoctor/client.py
 ```
 
-Make your changes and test them against a Kubernetes development environment.
-
-Commit your changes:
-
-```bash
-git add .
-git commit -m "feat: add my feature"
+##### B. Connect via Claude Desktop / AI IDEs
+Add directly to `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "kubedoctor": {
+      "url": "http://localhost/sse"
+    }
+  }
+}
 ```
 
-Push the branch:
-
-```bash
-git push origin feature/my-feature
-```
-
-Then open a Pull Request.
-
-### Contribution Ideas
-
-Areas that could benefit from contributions include:
-
-* New Kubernetes diagnostic tools
-* Better error handling
-* CLI improvements
-* Test coverage
-* MCP improvements
-* Documentation
-* AI/LLM integrations
-* Kubernetes security
-* Observability integrations
+*(Note: If your cluster does not have an Ingress controller, you can still connect using `kubectl port-forward -n kubedoctor svc/kubedoctor 8000:8000` and setting `KUBEDOCTOR_URL=http://localhost:8000/sse`)*.
 
 ---
 
-# 📜 License
+## Diagnostic Capabilities (16 MCP Tools)
 
-License information will be added to this repository.
+Both modes provide the exact same full suite of 16 diagnostic tools:
+
+| Tool Name | Scope | Description |
+|---|---|---|
+| `cluster_health` | Cluster | Evaluates all nodes for Readiness, MemoryPressure, DiskPressure, and PIDPressure. |
+| `node_health` | Cluster | Detailed condition breakdown for every node in the cluster. |
+| `list_pods` | Namespace | Lists all pods in the target namespace with their current phase. |
+| `namespace_overview` | Namespace | High-level summary of Pod counts, Services, and Deployments. |
+| `namespace_health_scan`| Namespace | **Full cluster scan**: detects crashing, failing, pending, and unready workloads. |
+| `diagnose_pod` | Workload | Deep inspection of pod containers, termination codes, waiting reasons, and conditions. |
+| `doctor` | Workload | **Master Diagnostic Engine**: aggregates container state, logs, and events into a root-cause summary. |
+| `get_pod_logs` | Workload | Fetches real-time tail logs for any container. |
+| `get_pod_events` | Workload | Retrieves filtered Kubernetes events associated with a pod. |
+| `detect_crashloops` | Workload | Pinpoints containers stuck in `CrashLoopBackOff` or high restart frequencies. |
+| `detect_image_pull_errors` | Workload | Detects `ImagePullBackOff` and `ErrImagePull` registry/secret failures. |
+| `detect_pending_pods` | Workload | Identifies unscheduled pods and missing node resources. |
+| `diagnose_deployment` | Workload | Analyzes desired vs. available vs. ready replicas and detects stuck rollouts. |
+| `diagnose_service` | Network | Inspects service ports and checks for active backend endpoints. |
+| `diagnose_ingress` | Network | Validates ingress rules, hostnames, and routing backends. |
+| `pod_events` | Workload | Detailed event timeline with occurrence counts and timestamps. |
+
+---
+
+## Interactive CLI Commands Reference
+
+When running `python src/kubedoctor/client.py`, the following commands are available:
 
 ```text
-License: TBD
+Commands:
+  health                          Check overall cluster health
+  node-health                     Check node readiness and pressure
+  pods [namespace]                List pods in a namespace
+  scan [namespace]                Full health scan across all pods
+  crashes [namespace]             Detect CrashLoopBackOff pods
+  pending [namespace]             Detect pods stuck in Pending
+  images [namespace]              Detect image pull errors
+  logs <pod> [namespace]          Get pod logs (last 100 lines)
+  events <pod> [namespace]        Get events for a pod
+  doctor <pod> [namespace]        Full diagnosis for a specific pod
+  deployment <name> [namespace]   Diagnose a deployment
+  service <name> [namespace]      Diagnose a service and its endpoints
+  ingress <name> [namespace]      Diagnose an ingress resource
+  overview [namespace]            Namespace-level resource overview
+  tools                           List all available MCP tools
+  help                            Show help message
+  exit                            Quit KubeDoctor
 ```
 
 ---
 
-# 👨‍💻 Author
+## Security & RBAC
 
-**Rahul Dan**
+KubeDoctor is built following the **Principle of Least Privilege**:
 
-DevOps / Cloud Platform Engineer specializing in:
+- **Strictly Read-Only**: Permissions are restricted to `["get", "list", "watch"]`. KubeDoctor **cannot** create, modify, or delete any cluster resources.
+- **Audited Access**: Every query executes through standard Kubernetes API audit logs under the `kubedoctor` ServiceAccount.
+- **Safe for AI Assistants**: LLMs interacting with KubeDoctor cannot perform accidental destructive changes.
 
-* Kubernetes
-* Cloud Native technologies
-* AWS
-* Docker
-* CI/CD
-* Linux
-* Kubernetes troubleshooting
-* Cloud infrastructure
-
-KubeDoctor is a personal Cloud Native engineering project focused on exploring the intersection of **Kubernetes operations, MCP, and AI-powered troubleshooting**.
-
----
-
-# ⭐ Project Vision
-
-KubeDoctor aims to evolve from a collection of Kubernetes diagnostic tools into an intelligent troubleshooting platform:
-
-```text
-                KubeDoctor
-                    │
-        ┌───────────┴───────────┐
-        │                       │
- Kubernetes Diagnostics      AI Reasoning
-        │                       │
-        └───────────┬───────────┘
-                    │
-             Evidence-Based
-              Troubleshooting
-                    │
-                    ▼
-          Faster Kubernetes
-             Operations
+```yaml
+# Helm RBAC specification
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "nodes", "services", "endpoints", "events", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
 ```
 
-The long-term vision is to provide engineers with a conversational interface for Kubernetes troubleshooting while keeping the underlying diagnostics **transparent, tool-driven, evidence-based, and controllable**.
+---
+
+## Helm Configuration Parameters
+
+The following table lists the configurable parameters in `values.yaml`:
+
+| Parameter | Description | Default |
+|---|---|---|
+| `replicaCount` | Number of KubeDoctor server replicas | `1` |
+| `image.repository` | Docker image repository | `rahuldan98/kubedoctor` |
+| `image.tag` | Docker image tag | `latest` |
+| `image.pullPolicy` | Image pull policy | `Always` |
+| `service.type` | Kubernetes service type | `ClusterIP` |
+| `service.port` | Service HTTP/SSE port | `8000` |
+| `ingress.enabled` | Enable ingress controller record (zero port-forwarding) | `false` |
+| `ingress.className`| Ingress controller class name | `nginx` |
+| `rbac.create` | Create ClusterRole & Binding | `true` |
+| `serviceAccount.create` | Create ServiceAccount | `true` |
+| `resources.limits.cpu` | Container CPU limit | `200m` |
+| `resources.limits.memory` | Container memory limit | `256Mi` |
+| `resources.requests.cpu` | Container CPU request | `100m` |
+| `resources.requests.memory`| Container memory request | `128Mi` |
 
 ---
 
-## 🚀 Status
+## Architecture
 
-**Current Status:** 🟢 Active Development
-
-**Focus:** MCP-based Kubernetes troubleshooting foundation
-
-**Next Major Milestone:** Interactive CLI → LLM integration → Natural-language Kubernetes troubleshooting
+```
++-------------------------------------------------------------+
+|                       MCP Clients                           |
+|     Claude Desktop  |  Cursor  |  CLI  |  Slackbot / CI     |
++------------------------------+------------------------------+
+                               |  JSON-RPC 2.0 (stdio or SSE)
++------------------------------v------------------------------+
+|                  KubeDoctor Server (FastMCP)                 |
+|  +--------------------+ +------------------+ +-----------+  |
+|  | Cluster Diagnostics| |Workload Analysis | | Networking|  |
+|  +--------------------+ +------------------+ +-----------+  |
++------------------------------+------------------------------+
+                               |  In-Cluster / Kubeconfig Auth
++------------------------------v------------------------------+
+|                   Kubernetes API Server                     |
++-------------------------------------------------------------+
+```
 
 ---
 
-> **KubeDoctor — Bringing structured Kubernetes diagnostics to the MCP ecosystem.**
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) for details.
+
+---
+
+## Author & Maintainer
+
+**Rahul Dan**  
+Cloud Platform & DevOps Engineer  
+Email: [rahuldan98@gmail.com](mailto:rahuldan98@gmail.com)

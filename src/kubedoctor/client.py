@@ -1,12 +1,27 @@
-import asyncio
+﻿import asyncio
+import os
 from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.sse import sse_client
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+# ============================================================
+# Connection mode
+#
+#   Local (default):
+#       No env var needed. Spawns server.py as a subprocess via stdio.
+#
+#   In-cluster (Helm):
+#       Set KUBEDOCTOR_URL to the server SSE endpoint, e.g.:
+#           $env:KUBEDOCTOR_URL = "http://localhost:8000/sse"
+#       (after: kubectl port-forward svc/kubedoctor 8000:8000 -n kubedoctor)
+# ============================================================
+
+KUBEDOCTOR_URL = os.getenv("KUBEDOCTOR_URL")
 
 server_params = StdioServerParameters(
     command="uv",
@@ -69,304 +84,330 @@ def parse_namespace(parts, index=1, default="default"):
     return parts[index] if len(parts) > index else default
 
 
-async def main():
+async def _run_repl(session: ClientSession) -> None:
+    """Shared REPL loop - works identically for both stdio and HTTP modes."""
 
-    print("Starting KubeDoctor MCP server...")
+    await session.initialize()
 
-    async with stdio_client(server_params) as (read, write):
+    print("\n================================")
+    print("       KUBEDOCTOR")
+    print("================================")
+    print("MCP server connected.")
+    print_help()
 
-        async with ClientSession(read, write) as session:
+    while True:
 
-            await session.initialize()
+        command = input("KubeDoctor> ").strip()
 
-            print("\n================================")
-            print("       KUBEDOCTOR")
-            print("================================")
-            print("MCP server connected.")
+        if not command:
+            continue
+
+        parts = command.split()
+        cmd = parts[0]
+
+        # ------------------------------------------------
+        # exit
+        # ------------------------------------------------
+
+        if cmd == "exit":
+            print("Goodbye!")
+            break
+
+        # ------------------------------------------------
+        # help
+        # ------------------------------------------------
+
+        elif cmd == "help":
             print_help()
 
-            while True:
+        # ------------------------------------------------
+        # health
+        # ------------------------------------------------
 
-                command = input("KubeDoctor> ").strip()
+        elif cmd == "health":
 
-                if not command:
-                    continue
+            await call_tool(session, "cluster_health")
 
-                parts = command.split()
-                cmd = parts[0]
+        # ------------------------------------------------
+        # node-health
+        # ------------------------------------------------
 
-                # ------------------------------------------------
-                # exit
-                # ------------------------------------------------
+        elif cmd == "node-health":
 
-                if cmd == "exit":
-                    print("Goodbye!")
-                    break
+            await call_tool(session, "node_health")
 
-                # ------------------------------------------------
-                # help
-                # ------------------------------------------------
+        # ------------------------------------------------
+        # pods [namespace]
+        # ------------------------------------------------
 
-                elif cmd == "help":
-                    print_help()
+        elif cmd == "pods":
 
-                # ------------------------------------------------
-                # health
-                # ------------------------------------------------
+            namespace = parse_namespace(parts)
 
-                elif cmd == "health":
+            await call_tool(
+                session,
+                "list_pods",
+                {"namespace": namespace},
+            )
 
-                    await call_tool(session, "cluster_health")
+        # ------------------------------------------------
+        # scan [namespace]
+        # ------------------------------------------------
 
-                # ------------------------------------------------
-                # node-health
-                # ------------------------------------------------
+        elif cmd == "scan":
 
-                elif cmd == "node-health":
+            namespace = parse_namespace(parts)
 
-                    await call_tool(session, "node_health")
+            await call_tool(
+                session,
+                "namespace_health_scan",
+                {"namespace": namespace},
+            )
 
-                # ------------------------------------------------
-                # pods [namespace]
-                # ------------------------------------------------
+        # ------------------------------------------------
+        # crashes [namespace]
+        # ------------------------------------------------
 
-                elif cmd == "pods":
+        elif cmd == "crashes":
 
-                    namespace = parse_namespace(parts)
+            namespace = parse_namespace(parts)
 
-                    await call_tool(
-                        session,
-                        "list_pods",
-                        {"namespace": namespace},
-                    )
+            await call_tool(
+                session,
+                "detect_crashloops",
+                {"namespace": namespace},
+            )
 
-                # ------------------------------------------------
-                # scan [namespace]
-                # ------------------------------------------------
+        # ------------------------------------------------
+        # pending [namespace]
+        # ------------------------------------------------
 
-                elif cmd == "scan":
+        elif cmd == "pending":
 
-                    namespace = parse_namespace(parts)
+            namespace = parse_namespace(parts)
 
-                    await call_tool(
-                        session,
-                        "namespace_health_scan",
-                        {"namespace": namespace},
-                    )
+            await call_tool(
+                session,
+                "detect_pending_pods",
+                {"namespace": namespace},
+            )
 
-                # ------------------------------------------------
-                # crashes [namespace]
-                # ------------------------------------------------
+        # ------------------------------------------------
+        # images [namespace]
+        # ------------------------------------------------
 
-                elif cmd == "crashes":
+        elif cmd == "images":
 
-                    namespace = parse_namespace(parts)
+            namespace = parse_namespace(parts)
 
-                    await call_tool(
-                        session,
-                        "detect_crashloops",
-                        {"namespace": namespace},
-                    )
+            await call_tool(
+                session,
+                "detect_image_pull_errors",
+                {"namespace": namespace},
+            )
 
-                # ------------------------------------------------
-                # pending [namespace]
-                # ------------------------------------------------
+        # ------------------------------------------------
+        # logs <pod> [namespace]
+        # ------------------------------------------------
 
-                elif cmd == "pending":
+        elif cmd == "logs":
 
-                    namespace = parse_namespace(parts)
+            if len(parts) < 2:
+                print("Usage: logs <pod> [namespace]")
+                continue
 
-                    await call_tool(
-                        session,
-                        "detect_pending_pods",
-                        {"namespace": namespace},
-                    )
+            pod_name = parts[1]
+            namespace = parse_namespace(parts, index=2)
 
-                # ------------------------------------------------
-                # images [namespace]
-                # ------------------------------------------------
+            await call_tool(
+                session,
+                "get_pod_logs",
+                {
+                    "pod_name": pod_name,
+                    "namespace": namespace,
+                },
+            )
+
+        # ------------------------------------------------
+        # events <pod> [namespace]
+        # ------------------------------------------------
+
+        elif cmd == "events":
+
+            if len(parts) < 2:
+                print("Usage: events <pod> [namespace]")
+                continue
+
+            pod_name = parts[1]
+            namespace = parse_namespace(parts, index=2)
+
+            await call_tool(
+                session,
+                "pod_events",
+                {
+                    "pod_name": pod_name,
+                    "namespace": namespace,
+                },
+            )
+
+        # ------------------------------------------------
+        # doctor <pod> [namespace]
+        # ------------------------------------------------
+
+        elif cmd == "doctor":
+
+            if len(parts) < 2:
+                print("Usage: doctor <pod> [namespace]")
+                continue
+
+            pod_name = parts[1]
+            namespace = parse_namespace(parts, index=2)
+
+            await call_tool(
+                session,
+                "doctor",
+                {
+                    "pod_name": pod_name,
+                    "namespace": namespace,
+                },
+            )
+
+        # ------------------------------------------------
+        # deployment <name> [namespace]
+        # ------------------------------------------------
+
+        elif cmd == "deployment":
+
+            if len(parts) < 2:
+                print("Usage: deployment <name> [namespace]")
+                continue
 
-                elif cmd == "images":
-
-                    namespace = parse_namespace(parts)
-
-                    await call_tool(
-                        session,
-                        "detect_image_pull_errors",
-                        {"namespace": namespace},
-                    )
-
-                # ------------------------------------------------
-                # logs <pod> [namespace]
-                # ------------------------------------------------
-
-                elif cmd == "logs":
-
-                    if len(parts) < 2:
-                        print("Usage: logs <pod> [namespace]")
-                        continue
-
-                    pod_name = parts[1]
-                    namespace = parse_namespace(parts, index=2)
-
-                    await call_tool(
-                        session,
-                        "get_pod_logs",
-                        {
-                            "pod_name": pod_name,
-                            "namespace": namespace,
-                        },
-                    )
-
-                # ------------------------------------------------
-                # events <pod> [namespace]
-                # ------------------------------------------------
-
-                elif cmd == "events":
-
-                    if len(parts) < 2:
-                        print("Usage: events <pod> [namespace]")
-                        continue
-
-                    pod_name = parts[1]
-                    namespace = parse_namespace(parts, index=2)
-
-                    await call_tool(
-                        session,
-                        "pod_events",
-                        {
-                            "pod_name": pod_name,
-                            "namespace": namespace,
-                        },
-                    )
-
-                # ------------------------------------------------
-                # doctor <pod> [namespace]
-                # ------------------------------------------------
-
-                elif cmd == "doctor":
-
-                    if len(parts) < 2:
-                        print("Usage: doctor <pod> [namespace]")
-                        continue
-
-                    pod_name = parts[1]
-                    namespace = parse_namespace(parts, index=2)
+            deployment_name = parts[1]
+            namespace = parse_namespace(parts, index=2)
 
-                    await call_tool(
-                        session,
-                        "doctor",
-                        {
-                            "pod_name": pod_name,
-                            "namespace": namespace,
-                        },
-                    )
+            await call_tool(
+                session,
+                "diagnose_deployment",
+                {
+                    "deployment_name": deployment_name,
+                    "namespace": namespace,
+                },
+            )
 
-                # ------------------------------------------------
-                # deployment <name> [namespace]
-                # ------------------------------------------------
+        # ------------------------------------------------
+        # service <name> [namespace]
+        # ------------------------------------------------
 
-                elif cmd == "deployment":
+        elif cmd == "service":
 
-                    if len(parts) < 2:
-                        print("Usage: deployment <name> [namespace]")
-                        continue
+            if len(parts) < 2:
+                print("Usage: service <name> [namespace]")
+                continue
 
-                    deployment_name = parts[1]
-                    namespace = parse_namespace(parts, index=2)
+            service_name = parts[1]
+            namespace = parse_namespace(parts, index=2)
 
-                    await call_tool(
-                        session,
-                        "diagnose_deployment",
-                        {
-                            "deployment_name": deployment_name,
-                            "namespace": namespace,
-                        },
-                    )
+            await call_tool(
+                session,
+                "diagnose_service",
+                {
+                    "service_name": service_name,
+                    "namespace": namespace,
+                },
+            )
 
-                # ------------------------------------------------
-                # service <name> [namespace]
-                # ------------------------------------------------
+        # ------------------------------------------------
+        # ingress <name> [namespace]
+        # ------------------------------------------------
 
-                elif cmd == "service":
+        elif cmd == "ingress":
 
-                    if len(parts) < 2:
-                        print("Usage: service <name> [namespace]")
-                        continue
+            if len(parts) < 2:
+                print("Usage: ingress <name> [namespace]")
+                continue
 
-                    service_name = parts[1]
-                    namespace = parse_namespace(parts, index=2)
+            ingress_name = parts[1]
+            namespace = parse_namespace(parts, index=2)
 
-                    await call_tool(
-                        session,
-                        "diagnose_service",
-                        {
-                            "service_name": service_name,
-                            "namespace": namespace,
-                        },
-                    )
+            await call_tool(
+                session,
+                "diagnose_ingress",
+                {
+                    "ingress_name": ingress_name,
+                    "namespace": namespace,
+                },
+            )
 
-                # ------------------------------------------------
-                # ingress <name> [namespace]
-                # ------------------------------------------------
+        # ------------------------------------------------
+        # overview [namespace]
+        # ------------------------------------------------
 
-                elif cmd == "ingress":
+        elif cmd == "overview":
 
-                    if len(parts) < 2:
-                        print("Usage: ingress <name> [namespace]")
-                        continue
+            namespace = parse_namespace(parts)
 
-                    ingress_name = parts[1]
-                    namespace = parse_namespace(parts, index=2)
+            await call_tool(
+                session,
+                "namespace_overview",
+                {"namespace": namespace},
+            )
 
-                    await call_tool(
-                        session,
-                        "diagnose_ingress",
-                        {
-                            "ingress_name": ingress_name,
-                            "namespace": namespace,
-                        },
-                    )
+        # ------------------------------------------------
+        # tools
+        # ------------------------------------------------
 
-                # ------------------------------------------------
-                # overview [namespace]
-                # ------------------------------------------------
+        elif cmd == "tools":
 
-                elif cmd == "overview":
+            tools = await session.list_tools()
 
-                    namespace = parse_namespace(parts)
+            print("\nAvailable MCP tools:")
 
-                    await call_tool(
-                        session,
-                        "namespace_overview",
-                        {"namespace": namespace},
-                    )
+            for tool in tools.tools:
+                print(f"  - {tool.name}")
 
-                # ------------------------------------------------
-                # tools
-                # ------------------------------------------------
+            print()
 
-                elif cmd == "tools":
+        # ------------------------------------------------
+        # unknown
+        # ------------------------------------------------
 
-                    tools = await session.list_tools()
+        else:
 
-                    print("\nAvailable MCP tools:")
+            print(
+                f"Unknown command: '{cmd}'. "
+                "Type 'help' to see all commands."
+            )
 
-                    for tool in tools.tools:
-                        print(f"  - {tool.name}")
 
-                    print()
+async def main():
 
-                # ------------------------------------------------
-                # unknown
-                # ------------------------------------------------
+    if KUBEDOCTOR_URL:
 
-                else:
+        # ------------------------------------------------
+        # HTTP/SSE mode — connect to in-cluster server
+        # ------------------------------------------------
 
-                    print(
-                        f"Unknown command: '{cmd}'. "
-                        "Type 'help' to see all commands."
-                    )
+        print(f"Connecting to KubeDoctor server at {KUBEDOCTOR_URL} ...")
+
+        async with sse_client(KUBEDOCTOR_URL) as (read, write):
+
+            async with ClientSession(read, write) as session:
+
+                await _run_repl(session)
+
+    else:
+
+        # ------------------------------------------------
+        # stdio mode — spawn server locally (default)
+        # ------------------------------------------------
+
+        print("Starting KubeDoctor MCP server...")
+
+        async with stdio_client(server_params) as (read, write):
+
+            async with ClientSession(read, write) as session:
+
+                await _run_repl(session)
 
 
 if __name__ == "__main__":

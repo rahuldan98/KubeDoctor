@@ -1,0 +1,14 @@
+apiVersion: v2
+name: kubedoctor
+description: AI-powered Kubernetes troubleshooting MCP server
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - troubleshooting
+  - mcp
+  - diagnostics
+maintainers:
+  - name: Rahul Dan
+    email: rahuldan98@gmail.com

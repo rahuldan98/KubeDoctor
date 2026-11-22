@@ -1,8 +1,26 @@
+﻿import os
+
 from mcp.server.fastmcp import FastMCP
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
-mcp = FastMCP("KubeDoctor")
+# ============================================================
+# Transport mode
+#
+#   KUBEDOCTOR_TRANSPORT=stdio  (default) - local subprocess mode
+#   KUBEDOCTOR_TRANSPORT=http            - in-cluster HTTP/SSE mode
+#
+# When deployed via Helm, the Deployment sets this to "http"
+# automatically. No code changes needed between environments.
+# ============================================================
+
+TRANSPORT = os.getenv("KUBEDOCTOR_TRANSPORT", "stdio")
+HTTP_HOST = os.getenv("KUBEDOCTOR_HOST", "0.0.0.0")
+# NOTE: Avoid KUBEDOCTOR_PORT — Kubernetes injects that automatically for
+# services named "kubedoctor" (e.g. tcp://10.x.x.x:8000), which breaks int().
+HTTP_PORT = int(os.getenv("KUBEDOCTOR_HTTP_PORT", "8000"))
+
+mcp = FastMCP("KubeDoctor", host=HTTP_HOST, port=HTTP_PORT)
 
 
 # ============================================================
@@ -1297,4 +1315,14 @@ def doctor(
 # ============================================================
 
 if __name__ == "__main__":
-    mcp.run()
+    if TRANSPORT == "http":
+        # In-cluster mode: HTTP/SSE transport
+        # Helm sets KUBEDOCTOR_TRANSPORT=http via the Deployment env var
+        print(
+            f"Starting KubeDoctor MCP server "
+            f"[HTTP/SSE] on {HTTP_HOST}:{HTTP_PORT}"
+        )
+        mcp.run(transport="sse")
+    else:
+        # Local mode: stdio transport (default, unchanged behaviour)
+        mcp.run()

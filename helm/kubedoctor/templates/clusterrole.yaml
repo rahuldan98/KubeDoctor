@@ -1,0 +1,33 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kubedoctor.fullname" . }}
+  labels:
+    {{- include "kubedoctor.labels" . | nindent 4 }}
+rules:
+  # Core API — pods, nodes, services, endpoints, events, namespaces
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - nodes
+      - services
+      - endpoints
+      - events
+      - namespaces
+    verbs: ["get", "list", "watch"]
+
+  # Apps API — deployments, replicasets
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+    verbs: ["get", "list", "watch"]
+
+  # Networking API — ingresses
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch"]
+{{- end }}
